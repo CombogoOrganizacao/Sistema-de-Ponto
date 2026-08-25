@@ -1,12 +1,12 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
-import { UsersService } from '../users/users.service';
+import { UsuarioService } from '../usuario/usuario.service';
 
 @Injectable()
 export class AuthMiddleware implements NestMiddleware {
   private jwtSecret = process.env.JWT_SECRET ?? 'change_this_secret';
 
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usuariosService: UsuarioService) {}
 
   async use(req: any, res: any, next: () => void) {
     const auth = req.headers?.authorization;
@@ -19,7 +19,7 @@ export class AuthMiddleware implements NestMiddleware {
     try {
       const decoded: any = jwt.verify(token, this.jwtSecret);
       const userId = decoded.sub as string;
-      const user = await this.usersService.findOneById(userId);
+      const user = await this.usuariosService.findOneById(userId);
       if (user) {
         // attach minimal user info to request
         req.user = { id: user.id, nome: user.nome, email: user.email, cargo: user.cargo };

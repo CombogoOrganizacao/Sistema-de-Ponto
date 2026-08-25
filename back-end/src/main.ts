@@ -1,11 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AuthService } from './auth/auth.service';
-import { UsersService } from './users/users.service';
+import { UsuarioService } from './usuario/usuario.service';
 import * as swaggerUi from 'swagger-ui-express';
+import { ValidationPipe } from '@nestjs/common/pipes/validation.pipe';
+import { CargoUsuario } from './usuario/entities/usuario.entity';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true, // importante: converte o body pro tipo do DTO antes de validar
+  }));
 
   // Manual OpenAPI document (minimal) based on current controllers
   const openapi = {
@@ -105,13 +112,13 @@ async function bootstrap() {
   // ensure there is a default admin user for first-run convenience
   try {
     const authService = app.get(AuthService);
-    const usersService = app.get(UsersService);
+    const usuarioService = app.get(UsuarioService);
     // check for any admin
-    const all = await usersService.findAll();
-    const hasAdmin = all.some((u: any) => u.cargo === 'admin');
+    const all = await usuarioService.findAll();
+    const hasAdmin = all.some((u: any) => u.cargo === CargoUsuario.ADMIN);
     if (!hasAdmin) {
       // register default admin: admin@example.com / admin123
-      await authService.register('Administrador', 'admin@example.com', 'admin123', 'admin');
+      await authService.register('Administrador', 'admin@example.com', 'admin123', CargoUsuario.ADMIN);
       // eslint-disable-next-line no-console
       console.log('Default admin created: admin@example.com / admin123');
     }

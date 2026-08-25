@@ -1,11 +1,9 @@
-import {
-    Entity,
-    PrimaryGeneratedColumn,
-    Column,
-    CreateDateColumn,
-    UpdateDateColumn,
-    OneToMany,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+
+export enum CargoUsuario {
+    ADMIN = 'admin',
+    USUARIO = 'user',
+}
 
 @Entity('usuario')
 export class Usuario {
@@ -19,11 +17,16 @@ export class Usuario {
     email!: string;
 
     @Column({ nullable: false })
-    senha!: string;
+    senhaHash!: string;
 
-    @Column({ nullable: false })
-    cargo!: string;
+    @Column({
+        type: 'enum',
+        enum: CargoUsuario,
+        default: CargoUsuario.USUARIO,
+        nullable: false,
+    })
+    cargo!: CargoUsuario;
 
-    @Column({ nullable: false })
+    @Column({ nullable: false, default: false })
     trabalhando!: boolean;
 }

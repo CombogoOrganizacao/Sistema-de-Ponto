@@ -2,6 +2,7 @@ import { Controller, Post, Body, Req, UnauthorizedException } from '@nestjs/comm
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { CargoUsuario } from 'src/usuario/entities/usuario.entity';
 
 @Controller('auth')
 export class AuthController {
@@ -11,7 +12,7 @@ export class AuthController {
   async register(@Body() body: RegisterDto) {
     const { nome, email, senha, cargo } = body;
     if (!nome || !email || !senha) throw new UnauthorizedException('Missing fields');
-    return this.authService.register(nome, email, senha, cargo ?? 'user');
+    return this.authService.register(nome, email, senha, cargo ?? CargoUsuario.USUARIO);
   }
 
   @Post('login')

@@ -1,7 +1,8 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import * as jwt from 'jsonwebtoken';
-import { UsersService } from '../users/users.service';
+import { UsuarioService } from '../usuario/usuario.service';
+import { CargoUsuario } from '../usuario/entities/usuario.entity';
 
 @Injectable()
 export class AuthService {
@@ -10,18 +11,18 @@ export class AuthService {
   private accessTokenTtl = '15m';
   private refreshTokenTtl = '7d';
 
-  constructor(private usersService: UsersService) {}
+  constructor(private usuarioService: UsuarioService) {}
 
-  async register(nome: string, email: string, senha: string, cargo: 'admin' | 'user' = 'user') {
-    const existing = await this.usersService.findByEmail(email);
+  async register(nome: string, email: string, senha: string, cargo: CargoUsuario ) {
+    const existing = await this.usuarioService.findByEmail(email);
     if (existing) throw new UnauthorizedException('Email already registered');
     const senhaHash = await argon2.hash(senha);
-    const user = await this.usersService.create({ nome, email, senhaHash, cargo });
+    const user = await this.usuarioService.create({ nome, email, senhaHash, cargo });
     return { id: user.id, nome: user.nome, email: user.email, cargo: user.cargo };
   }
 
   async validateUser(email: string, senha: string) {
-    const user = await this.usersService.findByEmail(email);
+    const user = await this.usuarioService.findByEmail(email);
     if (!user) return null;
     const ok = await argon2.verify(user.senhaHash, senha).catch(() => false);
     if (!ok) return null;
@@ -56,7 +57,7 @@ export class AuthService {
       const userId = decoded.sub as string;
       const tokens = this.refreshTokens.get(userId) ?? [];
       if (!tokens.includes(refreshToken)) throw new UnauthorizedException('Invalid refresh token');
-      const user = await this.usersService.findOneById(userId);
+      const user = await this.usuarioService.findOneById(userId);
       if (!user) throw new UnauthorizedException('User not found');
       const accessToken = this.signAccessToken(user);
       // optionally rotate refresh token: issue new one and replace
