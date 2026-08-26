@@ -377,7 +377,7 @@
       <!-- SEÇÃO 1: REGISTROS DE PONTO -->
       <div id="view-pontos-section" class="space-y-6">
         
-        <!-- Card de Bater Ponto (Web e Mobile PWA) -->
+        <!-- Card de Bater Ponto (Web e Mobile PWA com Geofence) -->
         <div class="bg-gray-900 border border-gray-800 p-5 sm:p-6 rounded-2xl shadow-xl">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <div>
@@ -385,9 +385,21 @@
                 <i data-lucide="clock" class="w-4 h-4 text-orange-400"></i>
                 <span>Registrar Ponto Agora</span>
               </h3>
-              <p class="text-xs text-gray-400 mt-0.5">Seu registro será sincronizado em tempo real no banco de dados.</p>
+              <p class="text-xs text-gray-400 mt-0.5">Validação por Geofence: UNICAP Campus e Museu da UNICAP.</p>
             </div>
             <div id="ponto-status-msg" class="hidden text-xs font-medium px-3 py-1.5 rounded-xl"></div>
+          </div>
+
+          <!-- Status de Localização / Geofence -->
+          <div id="geo-status-box" class="mb-4 p-3 bg-gray-950 border border-gray-800 rounded-xl flex items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-2 text-gray-300">
+              <span id="geo-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+              <span id="geo-status-text">Verificando sua localização GPS...</span>
+            </div>
+            <button id="btn-refresh-location" class="text-orange-400 hover:text-orange-300 font-semibold flex items-center gap-1">
+              <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+              Atualizar Local
+            </button>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -817,7 +829,107 @@
       renderIcons();
     });
 
-    // Bater Ponto (Web / Mobile PWA)
+    // ==========================================
+    // GEOFENCE CONFIGURAÇÕES (UNICAP & MUSEU)
+    // ==========================================
+    const GEOFENCE_LOCATIONS = [
+      {
+        name: "Campus UNICAP (Rua do Príncipe)",
+        lat: -8.0548955,
+        lng: -34.8877622,
+        radiusMeters: 450 // Raio de 450 metros cobre todo o campus principal e arredores
+      },
+      {
+        name: "Museu de Arqueologia da UNICAP",
+        lat: -8.056223,
+        lng: -34.888640,
+        radiusMeters: 250 // Raio de 250 metros
+      }
+    ];
+
+    // Fórmula de Haversine para cálculo de distância em metros
+    function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
+      const R = 6371e3; // Raio da Terra em metros
+      const phi1 = (lat1 * Math.PI) / 180;
+      const phi2 = (lat2 * Math.PI) / 180;
+      const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+      const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+      const a =
+        Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+        Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      return R * c; // Distância em metros
+    }
+
+    function checarGeofence(userLat, userLng) {
+      for (const loc of GEOFENCE_LOCATIONS) {
+        const distancia = calcularDistanciaMetros(userLat, userLng, loc.lat, loc.lng);
+        if (distancia <= loc.radiusMeters) {
+          return { dentro: true, localNome: loc.name, distancia: Math.round(distancia) };
+        }
+      }
+      // Se não estiver dentro de nenhum
+      const dist1 = Math.round(calcularDistanciaMetros(userLat, userLng, GEOFENCE_LOCATIONS[0].lat, GEOFENCE_LOCATIONS[0].lng));
+      return { dentro: false, distancia: dist1 };
+    }
+
+    // Elementos de Geofence
+    const geoStatusDot = document.getElementById("geo-status-dot");
+    const geoStatusText = document.getElementById("geo-status-text");
+    const btnRefreshLocation = document.getElementById("btn-refresh-location");
+    let currentGeoPosition = null;
+
+    function obterLocalizacaoAtual() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error("Geolocalização não suportada pelo seu navegador/aparelho."));
+          return;
+        }
+
+        geoStatusDot.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+        geoStatusText.textContent = "Obtendo sinal do GPS...";
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude, accuracy } = pos.coords;
+            const geoCheck = checarGeofence(latitude, longitude);
+            currentGeoPosition = { latitude, longitude, accuracy, ...geoCheck };
+
+            if (geoCheck.dentro) {
+              geoStatusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+              geoStatusText.innerHTML = `<strong class="text-emerald-400">Dentro do perímetro permitido:</strong> ${geoCheck.localNome} (~${geoCheck.distancia}m)`;
+            } else {
+              geoStatusDot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+              geoStatusText.innerHTML = `<strong class="text-rose-400">Fora do perímetro:</strong> Você está a ~${geoCheck.distancia}m da UNICAP (Necessário estar no Campus ou Museu)`;
+            }
+            resolve(currentGeoPosition);
+          },
+          (err) => {
+            geoStatusDot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+            let msg = "Permissão de localização negada ou GPS inativo.";
+            if (err.code === err.TIMEOUT) msg = "Tempo esgotado ao buscar GPS.";
+            geoStatusText.innerHTML = `<strong class="text-rose-400">GPS Indisponível:</strong> ${msg}`;
+            reject(new Error(msg));
+          },
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+        );
+      });
+    }
+
+    btnRefreshLocation.addEventListener("click", () => {
+      obterLocalizacaoAtual().catch(() => {});
+    });
+
+    // Inicia verificação de localização após login
+    setTimeout(() => {
+      if (currentUserData) {
+        obterLocalizacaoAtual().catch(() => {});
+      }
+    }, 1000);
+
+    // Bater Ponto (Web / Mobile PWA com Validação Geofence)
     const btnBaterEntrada = document.getElementById("btn-bater-entrada");
     const btnBaterSaida = document.getElementById("btn-bater-saida");
     const pontoStatusMsg = document.getElementById("ponto-status-msg");
@@ -832,7 +944,7 @@
       pontoStatusMsg.classList.remove("hidden");
       setTimeout(() => {
         pontoStatusMsg.classList.add("hidden");
-      }, 4000);
+      }, 5000);
     }
 
     async function registrarPontoWeb(tipo) {
@@ -843,22 +955,36 @@
 
       btnBaterEntrada.disabled = true;
       btnBaterSaida.disabled = true;
+      showPontoStatus("Validando sua localização por GPS...");
 
       try {
+        // Valida geolocalização em tempo real na hora do clique
+        const geo = await obterLocalizacaoAtual();
+
+        if (!geo.dentro) {
+          showPontoStatus(`Ponto Bloqueado: Você precisa estar no campus da UNICAP ou no Museu da UNICAP (Distância atual: ~${geo.distancia}m).`, true);
+          return;
+        }
+
         await addDoc(collection(db, "pontos"), {
           usuarioId: currentUserData.uid,
           usuarioNome: currentUserProfile.nome || currentUserData.displayName || "Colaborador",
           usuarioEmail: currentUserData.email || "",
           tipo: tipo, // 'entrada' ou 'saida'
-          localizacao: "Registro Web / PWA",
+          localizacao: `${geo.localNome} (GPS Validado)`,
+          coordenadas: {
+            latitude: geo.latitude,
+            longitude: geo.longitude,
+            precisao: geo.accuracy
+          },
           registro: serverTimestamp(),
           criadoEm: serverTimestamp()
         });
 
-        showPontoStatus(`Ponto de ${tipo.toUpperCase()} registrado com sucesso!`);
+        showPontoStatus(`Ponto de ${tipo.toUpperCase()} registrado com sucesso no ${geo.localNome}!`);
       } catch (err) {
         console.error("Erro ao registrar ponto:", err);
-        showPontoStatus("Erro ao bater ponto: " + err.message, true);
+        showPontoStatus(err.message || "Erro ao verificar localização GPS.", true);
       } finally {
         btnBaterEntrada.disabled = false;
         btnBaterSaida.disabled = false;
