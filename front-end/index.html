@@ -216,6 +216,54 @@
     </div>
   </div>
 
+  <!-- Modal Obrigatório de Seleção de Curso (1ª vez / Google Login) -->
+  <div id="curso-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-fade-in">
+      <div class="flex flex-col items-center text-center mb-5">
+        <div class="p-3 bg-orange-500/10 text-orange-400 rounded-2xl border border-orange-500/20 mb-3">
+          <i data-lucide="graduation-cap" class="w-8 h-8"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white">Selecione seu Curso</h3>
+        <p class="text-xs text-gray-400 mt-1">
+          Precisamos registrar seu curso para definir o horário de ponto e tolerâncias. <strong class="text-orange-400">Esta escolha é única e não poderá ser alterada.</strong>
+        </p>
+      </div>
+
+      <div id="curso-modal-error" class="hidden mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs"></div>
+
+      <div class="space-y-3">
+        <label class="block text-xs font-semibold text-gray-400 mb-1">Qual o seu curso?</label>
+        <select
+          id="modal-select-curso"
+          class="w-full px-4 py-3 bg-gray-950 border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:border-orange-500 cursor-pointer"
+        >
+          <option value="" disabled selected>Escolha um curso</option>
+          <option value="Jogos Digitais">Jogos Digitais (Jornada: 14h às 16h)</option>
+          <option value="Ciência da Computação">Ciência da Computação (Jornada: 14h às 17h)</option>
+          <option value="Sistemas para Internet">Sistemas para Internet (Jornada: 14h às 17h)</option>
+        </select>
+
+        <div class="p-3 bg-gray-950/60 rounded-xl border border-gray-800 text-[11px] text-gray-400 space-y-1 mt-3">
+          <p class="flex items-center gap-1.5 font-medium text-gray-300">
+            <i data-lucide="info" class="w-3.5 h-3.5 text-orange-400 shrink-0"></i>
+            Regras de Horário e Tolerância:
+          </p>
+          <p>• <strong>Entrada:</strong> 14:00 (Tolerância de 20 min: entre 13:40 e 14:20)</p>
+          <p>• <strong>Saída Jogos:</strong> 16:00 (Tolerância de 20 min: entre 15:40 e 16:20)</p>
+          <p>• <strong>Saída CC / Sistemas:</strong> 17:00 (Tolerância de 20 min: entre 16:40 e 17:20)</p>
+        </div>
+
+        <button
+          id="btn-confirmar-curso"
+          class="w-full py-3 bg-orange-500 hover:bg-orange-600 font-bold rounded-xl text-white transition mt-4 shadow-lg shadow-orange-500/20 text-sm flex items-center justify-center gap-2"
+        >
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>Confirmar e Continuar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="max-w-5xl mx-auto w-full flex-1 flex flex-col">
     <!-- Header -->
     <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 mb-8 border-b border-gray-800">
@@ -271,16 +319,35 @@
       </div>
 
       <form id="auth-form" class="flex flex-col gap-4">
-        <div id="nome-group" class="hidden">
-          <label class="block text-xs font-semibold text-gray-400 mb-1">Nome Completo</label>
-          <div class="relative">
-            <i data-lucide="user" class="w-4 h-4 text-gray-500 absolute left-3.5 top-3.5"></i>
-            <input
-              type="text"
-              id="input-nome"
-              placeholder="Seu nome"
-              class="w-full pl-10 pr-4 py-3 bg-gray-950 border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:border-orange-500 transition"
-            />
+        <div id="nome-group" class="hidden flex flex-col gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 mb-1">Nome Completo</label>
+            <div class="relative">
+              <i data-lucide="user" class="w-4 h-4 text-gray-500 absolute left-3.5 top-3.5"></i>
+              <input
+                type="text"
+                id="input-nome"
+                placeholder="Seu nome"
+                class="w-full pl-10 pr-4 py-3 bg-gray-950 border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:border-orange-500 transition"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 mb-1">Curso / Graduação</label>
+            <div class="relative">
+              <i data-lucide="graduation-cap" class="w-4 h-4 text-gray-500 absolute left-3.5 top-3.5"></i>
+              <select
+                id="input-curso"
+                class="w-full pl-10 pr-4 py-3 bg-gray-950 border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:border-orange-500 transition cursor-pointer appearance-none"
+              >
+                <option value="" disabled selected>Selecione seu curso</option>
+                <option value="Jogos Digitais">Jogos Digitais (14h às 16h)</option>
+                <option value="Ciência da Computação">Ciência da Computação (14h às 17h)</option>
+                <option value="Sistemas para Internet">Sistemas para Internet (14h às 17h)</option>
+              </select>
+              <i data-lucide="chevron-down" class="w-4 h-4 text-gray-500 absolute right-3.5 top-3.5 pointer-events-none"></i>
+            </div>
           </div>
         </div>
 
@@ -385,7 +452,10 @@
                 <i data-lucide="clock" class="w-4 h-4 text-orange-400"></i>
                 <span>Registrar Ponto Agora</span>
               </h3>
-              <p class="text-xs text-gray-400 mt-0.5">Validação por Geofence: UNICAP Campus e Museu da UNICAP.</p>
+              <p class="text-xs text-gray-400 mt-0.5">
+                Curso: <strong id="card-user-curso" class="text-white">Carregando...</strong> | 
+                Expediente: <span id="card-user-horario" class="text-orange-400 font-medium">14h às 17h (±20 min)</span>
+              </p>
             </div>
             <div id="ponto-status-msg" class="hidden text-xs font-medium px-3 py-1.5 rounded-xl"></div>
           </div>
@@ -746,18 +816,60 @@
 
     btnToggleAuth.addEventListener("click", toggleAuthMode);
 
-    // Submissão do Formulário de Auth
+    // Elementos de Seleção de Curso
+    const inputCurso = document.getElementById("input-curso");
+    const cursoModal = document.getElementById("curso-modal");
+    const modalSelectCurso = document.getElementById("modal-select-curso");
+    const btnConfirmarCurso = document.getElementById("btn-confirmar-curso");
+    const cursoModalError = document.getElementById("curso-modal-error");
+    const cardUserCurso = document.getElementById("card-user-curso");
+    const cardUserHorario = document.getElementById("card-user-horario");
+
+    // Modal de Confirmação de Curso (Login Google ou 1º acesso sem curso)
+    btnConfirmarCurso.addEventListener("click", async () => {
+      const selectedCurso = modalSelectCurso.value;
+      if (!selectedCurso) {
+        cursoModalError.textContent = "Por favor, selecione seu curso.";
+        cursoModalError.classList.remove("hidden");
+        return;
+      }
+      cursoModalError.classList.add("hidden");
+      btnConfirmarCurso.disabled = true;
+
+      try {
+        if (!currentUserData) return;
+        const userDocRef = doc(db, "usuarios", currentUserData.uid);
+        await updateDoc(userDocRef, {
+          curso: selectedCurso
+        });
+        currentUserProfile.curso = selectedCurso;
+        cursoModal.classList.add("hidden");
+        updateHeaderUI();
+      } catch (err) {
+        cursoModalError.textContent = "Erro ao salvar curso: " + err.message;
+        cursoModalError.classList.remove("hidden");
+      } finally {
+        btnConfirmarCurso.disabled = false;
+      }
+    });
+
+    // Submissão do Formulário de Auth (Cadastro e Login)
     authForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       showError("");
       const email = inputEmail.value.trim().toLowerCase();
       const senha = inputSenha.value;
       const nome = inputNome.value.trim();
+      const curso = inputCurso.value;
 
       try {
         if (isCadastro) {
           if (!nome) {
-            showError("Informe seu nome completo");
+            showError("Informe seu nome completo.");
+            return;
+          }
+          if (!curso) {
+            showError("Por favor, selecione seu curso / graduação.");
             return;
           }
           const res = await createUserWithEmailAndPassword(auth, email, senha);
@@ -768,6 +880,7 @@
             nome: nome,
             email: res.user.email,
             cargo: initialRole,
+            curso: curso,
             criadoEm: serverTimestamp()
           });
         } else {
@@ -786,7 +899,6 @@
         const res = await signInWithPopup(auth, provider);
         const email = (res.user.email || "").toLowerCase();
         
-        // Garante a existência do doc com o cargo correto
         const userDocRef = doc(db, "usuarios", res.user.uid);
         const userDoc = await getDoc(userDocRef);
         
@@ -797,6 +909,7 @@
             nome: res.user.displayName || "Usuário Google",
             email: res.user.email,
             cargo: initialRole,
+            curso: "", // Será preenchido obrigatoriamente via modal
             criadoEm: serverTimestamp()
           });
         } else if (email === ADMIN_EMAIL && userDoc.data().cargo !== "admin") {
@@ -870,7 +983,6 @@
           return { dentro: true, localNome: loc.name, distancia: Math.round(distancia) };
         }
       }
-      // Se não estiver dentro de nenhum
       const dist1 = Math.round(calcularDistanciaMetros(userLat, userLng, GEOFENCE_LOCATIONS[0].lat, GEOFENCE_LOCATIONS[0].lng));
       return { dentro: false, distancia: dist1 };
     }
@@ -929,7 +1041,71 @@
       }
     }, 1000);
 
-    // Bater Ponto (Web / Mobile PWA com Validação Geofence)
+    // ==========================================
+    // REGRAS DE HORÁRIO E TOLERÂNCIA (±20 min)
+    // ==========================================
+    // Entrada: 14:00 (Tolerância: 13:40 às 14:20)
+    // Saída Jogos Digitais: 16:00 (Tolerância: 15:40 às 16:20)
+    // Saída CC / Sistemas: 17:00 (Tolerância: 16:40 às 17:20)
+    function validarHorarioPonto(tipo, curso, isAdmin) {
+      if (isAdmin) {
+        return { valido: true }; // Admin pode bater/testar em qualquer horário
+      }
+
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      if (tipo === "entrada") {
+        // 14:00 -> 840 minutos. Tolerância: 13:40 (820 min) até 14:20 (860 min)
+        const minEntrada = 13 * 60 + 40; // 820 min
+        const maxEntrada = 14 * 60 + 20; // 860 min
+
+        if (currentMinutes < minEntrada || currentMinutes > maxEntrada) {
+          const agoraStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          return {
+            valido: false,
+            motivo: `Horário de Entrada não permitido (${agoraStr}). O ponto de entrada deve ser registrado entre 13:40 e 14:20 (tolerância de 20 min para as 14h).`
+          };
+        }
+        return { valido: true };
+      }
+
+      if (tipo === "saida") {
+        const isJogos = (curso || "").toLowerCase().includes("jogos");
+        
+        if (isJogos) {
+          // 16:00 -> 960 minutos. Tolerância: 15:40 (940 min) até 16:20 (980 min)
+          const minSaidaJogos = 15 * 60 + 40; // 940 min
+          const maxSaidaJogos = 16 * 60 + 20; // 980 min
+
+          if (currentMinutes < minSaidaJogos || currentMinutes > maxSaidaJogos) {
+            const agoraStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+            return {
+              valido: false,
+              motivo: `Horário de Saída para Jogos Digitais não permitido (${agoraStr}). O ponto deve ser registrado entre 15:40 e 16:20 (tolerância de 20 min para as 16h).`
+            };
+          }
+        } else {
+          // 17:00 -> 1020 minutos. Tolerância: 16:40 (1000 min) até 17:20 (1040 min)
+          const minSaidaGeral = 16 * 60 + 40; // 1000 min
+          const maxSaidaGeral = 17 * 60 + 20; // 1040 min
+
+          if (currentMinutes < minSaidaGeral || currentMinutes > maxSaidaGeral) {
+            const agoraStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+            return {
+              valido: false,
+              motivo: `Horário de Saída não permitido (${agoraStr}). O ponto deve ser registrado entre 16:40 e 17:20 (tolerância de 20 min para as 17h).`
+            };
+          }
+        }
+
+        return { valido: true };
+      }
+
+      return { valido: true };
+    }
+
+    // Bater Ponto (Web / Mobile PWA com Validação Geofence e Tolerância de Horário)
     const btnBaterEntrada = document.getElementById("btn-bater-entrada");
     const btnBaterSaida = document.getElementById("btn-bater-saida");
     const pontoStatusMsg = document.getElementById("ponto-status-msg");
@@ -944,7 +1120,7 @@
       pontoStatusMsg.classList.remove("hidden");
       setTimeout(() => {
         pontoStatusMsg.classList.add("hidden");
-      }, 5000);
+      }, 6000);
     }
 
     async function registrarPontoWeb(tipo) {
@@ -953,12 +1129,22 @@
         return;
       }
 
+      const curso = currentUserProfile.curso || "";
+      const isAdmin = currentUserProfile.cargo === "admin";
+
+      // 1. Validação de Horário com Tolerância
+      const validacaoHorario = validarHorarioPonto(tipo, curso, isAdmin);
+      if (!validacaoHorario.valido) {
+        showPontoStatus(validacaoHorario.motivo, true);
+        return;
+      }
+
       btnBaterEntrada.disabled = true;
       btnBaterSaida.disabled = true;
       showPontoStatus("Validando sua localização por GPS...");
 
       try {
-        // Valida geolocalização em tempo real na hora do clique
+        // 2. Validação Geofence em tempo real
         const geo = await obterLocalizacaoAtual();
 
         if (!geo.dentro) {
@@ -970,6 +1156,7 @@
           usuarioId: currentUserData.uid,
           usuarioNome: currentUserProfile.nome || currentUserData.displayName || "Colaborador",
           usuarioEmail: currentUserData.email || "",
+          usuarioCurso: curso || "Não especificado",
           tipo: tipo, // 'entrada' ou 'saida'
           localizacao: `${geo.localNome} (GPS Validado)`,
           coordenadas: {
@@ -1017,11 +1204,13 @@
 
         let cargo = (email === ADMIN_EMAIL) ? "admin" : "aluno";
         let nome = user.displayName || user.email;
+        let curso = "";
 
         if (userDoc.exists()) {
           const data = userDoc.data();
           cargo = (email === ADMIN_EMAIL) ? "admin" : (data.cargo || "aluno");
           nome = data.nome || nome;
+          curso = data.curso || "";
           
           // Força admin para o e-mail combogounicap@gmail.com
           if (email === ADMIN_EMAIL && data.cargo !== "admin") {
@@ -1033,12 +1222,21 @@
             nome: nome,
             email: user.email,
             cargo: cargo,
+            curso: "",
             criadoEm: serverTimestamp()
           });
         }
 
-        currentUserProfile = { uid: user.uid, nome, email, cargo };
+        currentUserProfile = { uid: user.uid, nome, email, cargo, curso };
         updateHeaderUI();
+
+        // Se o usuário não tiver curso cadastrado (ex: primeiro login Google), abre modal obrigatório
+        if (!curso && cargo !== "admin") {
+          cursoModal.classList.remove("hidden");
+          renderIcons();
+        } else {
+          cursoModal.classList.add("hidden");
+        }
 
         // Inicializa listeners
         listenPontos();
@@ -1057,6 +1255,7 @@
         userHeader.classList.add("hidden");
         dashboardSection.classList.add("hidden");
         authSection.classList.remove("hidden");
+        cursoModal.classList.add("hidden");
         pontosTbody.innerHTML = "";
       }
       renderIcons();
@@ -1067,7 +1266,20 @@
       headerUserName.textContent = currentUserProfile.nome || currentUserProfile.email;
       
       const cargo = currentUserProfile.cargo || "aluno";
-      headerUserBadge.textContent = cargo.toUpperCase();
+      const curso = currentUserProfile.curso || "Geral";
+      headerUserBadge.textContent = `${cargo.toUpperCase()} • ${curso}`;
+
+      if (cardUserCurso) {
+        cardUserCurso.textContent = curso || "Não especificado";
+      }
+
+      if (cardUserHorario) {
+        if (curso.toLowerCase().includes("jogos")) {
+          cardUserHorario.textContent = "14:00 às 16:00 (±20 min)";
+        } else {
+          cardUserHorario.textContent = "14:00 às 17:00 (±20 min)";
+        }
+      }
 
       if (cargo === "admin") {
         headerUserBadge.className = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-400 border border-red-500/20 uppercase tracking-wider";
@@ -1267,6 +1479,7 @@
           <td class="px-4 py-3.5">
             <div class="font-medium text-white">${u.nome || 'Sem nome'}</div>
             <div class="text-xs text-gray-400">${u.email || '-'}</div>
+            <div class="text-[11px] text-orange-400 font-medium mt-0.5">🎓 ${u.curso || 'Curso não definido'}</div>
           </td>
           <td class="px-4 py-3.5">
             <span class="font-mono text-xs font-semibold text-orange-400 bg-orange-500/10 px-2.5 py-1 rounded-lg border border-orange-500/20">
