@@ -375,7 +375,39 @@
       </div>
 
       <!-- SEÇÃO 1: REGISTROS DE PONTO -->
-      <div id="view-pontos-section" class="space-y-4">
+      <div id="view-pontos-section" class="space-y-6">
+        
+        <!-- Card de Bater Ponto (Web e Mobile PWA) -->
+        <div class="bg-gray-900 border border-gray-800 p-5 sm:p-6 rounded-2xl shadow-xl">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <div>
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <i data-lucide="clock" class="w-4 h-4 text-orange-400"></i>
+                <span>Registrar Ponto Agora</span>
+              </h3>
+              <p class="text-xs text-gray-400 mt-0.5">Seu registro será sincronizado em tempo real no banco de dados.</p>
+            </div>
+            <div id="ponto-status-msg" class="hidden text-xs font-medium px-3 py-1.5 rounded-xl"></div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <button
+              id="btn-bater-entrada"
+              class="py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40"
+            >
+              <i data-lucide="arrow-down-left" class="w-5 h-5"></i>
+              <span>Bater Entrada</span>
+            </button>
+
+            <button
+              id="btn-bater-saida"
+              class="py-3.5 px-4 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40"
+            >
+              <i data-lucide="arrow-up-right" class="w-5 h-5"></i>
+              <span>Bater Saída</span>
+            </button>
+          </div>
+        </div>
         <!-- Filtros de Data -->
         <div class="bg-gray-900 border border-gray-800 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
           <div class="flex items-center gap-2 text-sm font-semibold text-white">
@@ -519,6 +551,7 @@
     import { 
       getFirestore, 
       collection, 
+      addDoc,
       query, 
       orderBy, 
       onSnapshot, 
@@ -783,6 +816,57 @@
       viewPontosSection.classList.add("hidden");
       renderIcons();
     });
+
+    // Bater Ponto (Web / Mobile PWA)
+    const btnBaterEntrada = document.getElementById("btn-bater-entrada");
+    const btnBaterSaida = document.getElementById("btn-bater-saida");
+    const pontoStatusMsg = document.getElementById("ponto-status-msg");
+
+    function showPontoStatus(text, isError = false) {
+      pontoStatusMsg.textContent = text;
+      pontoStatusMsg.className = `text-xs font-medium px-3 py-1.5 rounded-xl ${
+        isError 
+          ? "bg-red-500/10 text-red-400 border border-red-500/20" 
+          : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+      }`;
+      pontoStatusMsg.classList.remove("hidden");
+      setTimeout(() => {
+        pontoStatusMsg.classList.add("hidden");
+      }, 4000);
+    }
+
+    async function registrarPontoWeb(tipo) {
+      if (!currentUserData || !currentUserProfile) {
+        showPontoStatus("Você precisa estar logado.", true);
+        return;
+      }
+
+      btnBaterEntrada.disabled = true;
+      btnBaterSaida.disabled = true;
+
+      try {
+        await addDoc(collection(db, "pontos"), {
+          usuarioId: currentUserData.uid,
+          usuarioNome: currentUserProfile.nome || currentUserData.displayName || "Colaborador",
+          usuarioEmail: currentUserData.email || "",
+          tipo: tipo, // 'entrada' ou 'saida'
+          localizacao: "Registro Web / PWA",
+          registro: serverTimestamp(),
+          criadoEm: serverTimestamp()
+        });
+
+        showPontoStatus(`Ponto de ${tipo.toUpperCase()} registrado com sucesso!`);
+      } catch (err) {
+        console.error("Erro ao registrar ponto:", err);
+        showPontoStatus("Erro ao bater ponto: " + err.message, true);
+      } finally {
+        btnBaterEntrada.disabled = false;
+        btnBaterSaida.disabled = false;
+      }
+    }
+
+    btnBaterEntrada.addEventListener("click", () => registrarPontoWeb("entrada"));
+    btnBaterSaida.addEventListener("click", () => registrarPontoWeb("saida"));
 
     // Filtros de Data
     filterDate.addEventListener("input", renderPontosTable);
