@@ -1,181 +1,189 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import { ExternalLink } from '@/components/external-link';
+import React, { useEffect, useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  FlatList,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/contexts/auth.context';
+import { pontoService, RegistroPonto, TipoPonto } from '@/services/ponto.service';
 
+export default function PontoScreen() {
+  const { user, userProfile } = useAuth();
+  const [pontos, setPontos] = useState<RegistroPonto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
+  useEffect(() => {
+    if (!user) {
+      setPontos([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    // Escuta em tempo real os registros de ponto do Firestore
+    const unsubscribe = pontoService.ouvirPontosPorUsuario(
+      user.uid,
+      (novosPontos) => {
+        setPontos(novosPontos);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Erro ao buscar histórico de pontos:', err);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleBaterPonto = async (tipo: TipoPonto) => {
+    if (!user) {
+      Alert.alert('Aviso', 'Faça login na aba Home primeiro para bater seu ponto.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await pontoService.registrarPonto({
+        usuarioId: user.uid,
+        usuarioNome: userProfile?.nome || user.displayName || 'Colaborador',
+        usuarioEmail: user.email || '',
+        tipo,
+        localizacao: 'Registro via Mobile App',
+        registro: new Date(),
+      });
+      Alert.alert(
+        'Ponto Registrado!',
+        `Seu ponto de ${tipo.toUpperCase()} foi salvo com sucesso no Firestore.`
+      );
+    } catch (error: any) {
+      console.error('Erro ao bater ponto:', error);
+      Alert.alert('Erro ao registrar ponto', error.message || 'Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
   };
-  const theme = useTheme();
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+  const formatarDataHora = (data: any) => {
+    if (!data) return '-';
+    const d = data instanceof Date ? data : new Date(data);
+    return isNaN(d.getTime()) ? '-' : d.toLocaleString('pt-BR');
+  };
+
+  if (!user) {
+    return (
+      <ThemedView style={styles.container}>
+        <SafeAreaView className="flex-1 justify-center items-center p-6">
+          <Text className="text-4xl mb-4">⏱️</Text>
+          <ThemedText type="title" className="text-center mb-2">Registro de Ponto</ThemedText>
+          <ThemedText className="text-gray-400 text-center">
+            Por favor, faça login na tela inicial para registrar seus pontos e ver seu histórico.
+          </ThemedText>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
+    <ThemedView style={styles.container}>
+      <SafeAreaView className="flex-1 p-6">
+        <View className="mb-6">
+          <ThemedText type="title">Bater Ponto ⏱️</ThemedText>
+          <ThemedText className="text-gray-400">
+            {userProfile?.nome || user.displayName} ({user.email})
+          </ThemedText>
+        </View>
+
+        {/* Botões de Ação */}
+        <View className="flex-row gap-4 mb-6">
+          <TouchableOpacity
+            onPress={() => handleBaterPonto('entrada')}
+            disabled={saving}
+            className="flex-1 bg-emerald-600 active:bg-emerald-700 p-4 rounded-xl items-center justify-center shadow"
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Text className="text-2xl mb-1">🟢</Text>
+                <ThemedText className="font-bold text-white text-base">Entrada</ThemedText>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => handleBaterPonto('saida')}
+            disabled={saving}
+            className="flex-1 bg-rose-600 active:bg-rose-700 p-4 rounded-xl items-center justify-center shadow"
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Text className="text-2xl mb-1">🔴</Text>
+                <ThemedText className="font-bold text-white text-base">Saída</ThemedText>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Histórico em Tempo Real */}
+        <View className="flex-1">
+          <ThemedText type="subtitle" className="mb-3">
+            Histórico Recente (Firestore)
           </ThemedText>
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
-
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
-
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
+          {loading ? (
+            <View className="flex-1 justify-center items-center">
+              <ActivityIndicator size="small" color="#f97316" />
+            </View>
+          ) : pontos.length === 0 ? (
+            <View className="flex-1 justify-center items-center">
+              <ThemedText className="text-gray-500">Nenhum registro de ponto encontrado.</ThemedText>
+            </View>
+          ) : (
+            <FlatList
+              data={pontos}
+              keyExtractor={(item) => item.id || Math.random().toString()}
+              renderItem={({ item }) => (
+                <View className="bg-gray-800/80 border border-gray-700/60 p-4 rounded-xl mb-3 flex-row justify-between items-center">
+                  <View className="flex-row items-center gap-3">
+                    <Text className="text-xl">
+                      {item.tipo === 'entrada' ? '🟢' : '🔴'}
+                    </Text>
+                    <View>
+                      <ThemedText className="font-semibold text-white capitalize">
+                        {item.tipo}
+                      </ThemedText>
+                      <ThemedText className="text-xs text-gray-400">
+                        {typeof item.localizacao === 'string' ? item.localizacao : 'Local registrado'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <ThemedText className="text-xs text-gray-300 font-mono">
+                    {formatarDataHora(item.registro)}
+                  </ThemedText>
+                </View>
+              )}
+            />
+          )}
+        </View>
+      </SafeAreaView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
+  container: {
     flex: 1,
   },
-  contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
-  },
-  titleContainer: {
-    gap: Spacing.three,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
-  },
-  centerText: {
-    textAlign: 'center',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
-  },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-  },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
-    width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
-  },
 });
+

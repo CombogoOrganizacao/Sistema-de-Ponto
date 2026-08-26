@@ -1,0 +1,42 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Função auxiliar para verificar se o usuário está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Função auxiliar para verificar se o usuário é o dono do recurso
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Função para verificar se o usuário é admin
+    function isAdmin() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.cargo == 'admin';
+    }
+
+    // Regras para a coleção de usuários
+    match /usuarios/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Regras para a coleção de pontos
+    match /pontos/{pontoId} {
+      // Usuário pode ler seus próprios pontos ou Admin pode ler todos
+      allow read: if isAuthenticated() && (resource.data.usuarioId == request.auth.uid || isAdmin());
+      
+      // Usuário autenticado pode criar seu registro de ponto
+      allow create: if isAuthenticated() && request.resource.data.usuarioId == request.auth.uid;
+      
+      // Apenas admin pode alterar ou deletar pontos (integridade do registro)
+      allow update, delete: if isAdmin();
+    }
+  }
+}
