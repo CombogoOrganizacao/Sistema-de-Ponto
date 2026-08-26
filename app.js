@@ -480,6 +480,79 @@ function validarHorarioPonto(tipo, curso, isAdmin) {
   return { valido: true };
 }
 
+// ==========================================
+// CONTROLE DE PONTOS DIÁRIOS (1 Entrada e 1 Saída por dia)
+// ==========================================
+function checarPontosHoje(userId) {
+  if (!userId) return { jaBateuEntrada: false, jaBateuSaida: false, horaEntrada: null, horaSaida: null };
+
+  const hoje = new Date();
+  const hojeAno = hoje.getFullYear();
+  const hojeMes = hoje.getMonth();
+  const hojeDia = hoje.getDate();
+
+  const pontosHoje = allPontosData.filter(p => {
+    if (p.usuarioId !== userId || !p.registro) return false;
+    const d = p.registro.toDate ? p.registro.toDate() : new Date(p.registro);
+    return !isNaN(d.getTime()) && d.getFullYear() === hojeAno && d.getMonth() === hojeMes && d.getDate() === hojeDia;
+  });
+
+  const pontoEntrada = pontosHoje.find(p => p.tipo === "entrada");
+  const pontoSaida = pontosHoje.find(p => p.tipo === "saida");
+
+  return {
+    jaBateuEntrada: !!pontoEntrada,
+    jaBateuSaida: !!pontoSaida,
+    horaEntrada: pontoEntrada ? (pontoEntrada.registro.toDate ? pontoEntrada.registro.toDate() : new Date(pontoEntrada.registro)) : null,
+    horaSaida: pontoSaida ? (pontoSaida.registro.toDate ? pontoSaida.registro.toDate() : new Date(pontoSaida.registro)) : null
+  };
+}
+
+function atualizarEstadoBotoesPonto() {
+  if (!currentUserData) return;
+
+  const statusHoje = checarPontosHoje(currentUserData.uid);
+  const isAdmin = currentUserProfile && currentUserProfile.cargo === "admin";
+
+  // Se for admin, os botões permanecem sempre habilitados para testes caso queira
+  if (isAdmin) {
+    btnBaterEntrada.disabled = false;
+    btnBaterSaida.disabled = false;
+    btnBaterEntrada.className = "py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer";
+    btnBaterSaida.className = "py-3.5 px-4 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40 cursor-pointer";
+    btnBaterEntrada.innerHTML = `<i data-lucide="arrow-down-left" class="w-5 h-5"></i><span>Bater Entrada (Admin Livre)</span>`;
+    btnBaterSaida.innerHTML = `<i data-lucide="arrow-up-right" class="w-5 h-5"></i><span>Bater Saída (Admin Livre)</span>`;
+    renderIcons();
+    return;
+  }
+
+  // Controle de Entrada
+  if (statusHoje.jaBateuEntrada) {
+    btnBaterEntrada.disabled = true;
+    btnBaterEntrada.className = "py-3.5 px-4 bg-gray-800 text-gray-400 border border-gray-700 font-semibold text-sm rounded-xl cursor-not-allowed flex items-center justify-center gap-2 opacity-80";
+    const horaFormat = statusHoje.horaEntrada ? statusHoje.horaEntrada.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+    btnBaterEntrada.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i><span>Entrada Realizada (${horaFormat})</span>`;
+  } else {
+    btnBaterEntrada.disabled = false;
+    btnBaterEntrada.className = "py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer";
+    btnBaterEntrada.innerHTML = `<i data-lucide="arrow-down-left" class="w-5 h-5"></i><span>Bater Entrada</span>`;
+  }
+
+  // Controle de Saída
+  if (statusHoje.jaBateuSaida) {
+    btnBaterSaida.disabled = true;
+    btnBaterSaida.className = "py-3.5 px-4 bg-gray-800 text-gray-400 border border-gray-700 font-semibold text-sm rounded-xl cursor-not-allowed flex items-center justify-center gap-2 opacity-80";
+    const horaFormat = statusHoje.horaSaida ? statusHoje.horaSaida.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+    btnBaterSaida.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5 text-rose-400"></i><span>Saída Realizada (${horaFormat})</span>`;
+  } else {
+    btnBaterSaida.disabled = false;
+    btnBaterSaida.className = "py-3.5 px-4 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40 cursor-pointer";
+    btnBaterSaida.innerHTML = `<i data-lucide="arrow-up-right" class="w-5 h-5"></i><span>Bater Saída</span>`;
+  }
+
+  renderIcons();
+}
+
 // Bater Ponto
 function showPontoStatus(text, isError = false) {
   pontoStatusMsg.textContent = text;
@@ -503,6 +576,20 @@ async function registrarPontoWeb(tipo) {
   const curso = currentUserProfile.curso || "";
   const isAdmin = currentUserProfile.cargo === "admin";
 
+  // 1. Verificação de Ponto Já Realizado Hoje (1 por dia)
+  if (!isAdmin) {
+    const statusHoje = checarPontosHoje(currentUserData.uid);
+    if (tipo === "entrada" && statusHoje.jaBateuEntrada) {
+      showPontoStatus("Você já realizou o registro de ENTRADA hoje. Apenas 1 entrada é permitida por dia.", true);
+      return;
+    }
+    if (tipo === "saida" && statusHoje.jaBateuSaida) {
+      showPontoStatus("Você já realizou o registro de SAÍDA hoje. Apenas 1 saída é permitida por dia.", true);
+      return;
+    }
+  }
+
+  // 2. Validação de Horário com Tolerância
   const validacaoHorario = validarHorarioPonto(tipo, curso, isAdmin);
   if (!validacaoHorario.valido) {
     showPontoStatus(validacaoHorario.motivo, true);
@@ -518,6 +605,7 @@ async function registrarPontoWeb(tipo) {
 
     if (!geo.dentro) {
       showPontoStatus(`Ponto Bloqueado: Você precisa estar no campus da UNICAP ou no Museu da UNICAP (Distância atual: ~${geo.distancia}m).`, true);
+      atualizarEstadoBotoesPonto();
       return;
     }
 
@@ -537,13 +625,12 @@ async function registrarPontoWeb(tipo) {
       criadoEm: serverTimestamp()
     });
 
-    showPontoStatus(`Ponto de ${tipo.toUpperCase()} registrado com sucesso no ${geo.localNome}!`);
+    showPontoStatus(`Ponto de ${tipo.toUpperCase()} registrado com sucesso no ${geo.localNome}! (+1h30min adicionado)`);
   } catch (err) {
     console.error("Erro ao registrar ponto:", err);
     showPontoStatus(err.message || "Erro ao verificar localização GPS.", true);
   } finally {
-    btnBaterEntrada.disabled = false;
-    btnBaterSaida.disabled = false;
+    atualizarEstadoBotoesPonto();
   }
 }
 
@@ -665,6 +752,7 @@ function listenPontos() {
     allPontosData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     renderPontosTable();
     calculateUserHours();
+    atualizarEstadoBotoesPonto();
     if (currentUserProfile && currentUserProfile.cargo === "admin") {
       renderAdminStats();
       renderAdminUsersTable();
