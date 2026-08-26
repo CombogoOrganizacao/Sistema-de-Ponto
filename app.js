@@ -19,6 +19,10 @@ import {
   getDoc, 
   setDoc, 
   updateDoc,
+  deleteDoc,
+  writeBatch,
+  where,
+  getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
 
@@ -746,36 +750,31 @@ function renderPontosTable() {
   renderIcons();
 }
 
+// ==========================================
+// CÁLCULO DE HORAS ACUMULADAS (+1:30h por Ponto)
+// ==========================================
+// Cada batida de Entrada garante +1h30min (90 min)
+// Cada batida de Saída garante +1h30min (90 min)
+// Totalizando 3h00min no dia com o ciclo completo
 function calculateHoursForUser(userId) {
-  const userPontos = allPontosData
-    .filter(p => p.usuarioId === userId && p.registro)
-    .map(p => ({
-      tipo: p.tipo,
-      date: p.registro.toDate ? p.registro.toDate() : new Date(p.registro)
-    }))
-    .filter(p => !isNaN(p.date.getTime()))
-    .sort((a, b) => a.date - b.date);
+  const userPontos = allPontosData.filter(p => p.usuarioId === userId && p.registro);
+  
+  const totalEntradas = userPontos.filter(p => p.tipo === "entrada").length;
+  const totalSaidas = userPontos.filter(p => p.tipo === "saida").length;
+  const totalPontosValidos = totalEntradas + totalSaidas;
 
-  let totalMillis = 0;
-  let lastEntrada = null;
-
-  userPontos.forEach(p => {
-    if (p.tipo === "entrada") {
-      lastEntrada = p.date;
-    } else if (p.tipo === "saida" && lastEntrada) {
-      const diff = p.date - lastEntrada;
-      if (diff > 0 && diff < 24 * 60 * 60 * 1000) {
-        totalMillis += diff;
-      }
-      lastEntrada = null;
-    }
-  });
-
-  const totalMinutes = Math.floor(totalMillis / (1000 * 60));
+  const totalMinutes = totalPontosValidos * 90; // 90 minutos (+1:30h) por batida
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
-  return { hours, minutes, totalMinutes, text: `${hours}h ${String(minutes).padStart(2, '0')}m` };
+  return {
+    hours,
+    minutes,
+    totalMinutes,
+    totalEntradas,
+    totalSaidas,
+    text: `${hours}h ${String(minutes).padStart(2, '0')}m`
+  };
 }
 
 function calculateUserHours() {
@@ -842,9 +841,12 @@ function renderAdminUsersTable() {
         <div class="text-[11px] text-orange-400 font-medium mt-0.5">🎓 ${u.curso || 'Curso não definido'}</div>
       </td>
       <td class="px-4 py-3.5">
-        <span class="font-mono text-xs font-semibold text-orange-400 bg-orange-500/10 px-2.5 py-1 rounded-lg border border-orange-500/20">
-          ${stats.text}
-        </span>
+        <div class="flex flex-col gap-0.5">
+          <span class="font-mono text-xs font-semibold text-orange-400 bg-orange-500/10 px-2.5 py-1 rounded-lg border border-orange-500/20 w-fit">
+            ${stats.text}
+          </span>
+          <span class="text-[10px] text-gray-500">(${stats.totalEntradas} Entradas • ${stats.totalSaidas} Saídas)</span>
+        </div>
       </td>
       <td class="px-4 py-3.5">
         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase ${badgeColor} border">
@@ -855,14 +857,25 @@ function renderAdminUsersTable() {
         ${isMasterAdmin ? `
           <span class="text-xs text-gray-500 italic">Admin Principal</span>
         ` : `
-          <select
-            data-user-id="${uid}"
-            class="role-select px-3 py-1.5 bg-gray-950 border border-gray-700 rounded-xl text-xs text-white focus:outline-none focus:border-orange-500 cursor-pointer"
-          >
-            <option value="aluno" ${currentRole === 'aluno' ? 'selected' : ''}>Aluno</option>
-            <option value="colaborador" ${currentRole === 'colaborador' ? 'selected' : ''}>Colaborador</option>
-            <option value="admin" ${currentRole === 'admin' ? 'selected' : ''}>Administrador</option>
-          </select>
+          <div class="flex items-center justify-end gap-2">
+            <select
+              data-user-id="${uid}"
+              class="role-select px-2.5 py-1.5 bg-gray-950 border border-gray-700 rounded-xl text-xs text-white focus:outline-none focus:border-orange-500 cursor-pointer"
+            >
+              <option value="aluno" ${currentRole === 'aluno' ? 'selected' : ''}>Aluno</option>
+              <option value="colaborador" ${currentRole === 'colaborador' ? 'selected' : ''}>Colaborador</option>
+              <option value="admin" ${currentRole === 'admin' ? 'selected' : ''}>Administrador</option>
+            </select>
+            <button
+              data-delete-user-id="${uid}"
+              data-user-name="${u.nome || u.email}"
+              class="btn-delete-user p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl transition flex items-center gap-1 text-xs font-medium"
+              title="Excluir Conta e Registros"
+            >
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span class="hidden sm:inline">Excluir</span>
+            </button>
+          </div>
         `}
       </td>
     `;
@@ -870,6 +883,7 @@ function renderAdminUsersTable() {
     adminUsersTbody.appendChild(tr);
   });
 
+  // Listeners para alteração de cargo
   document.querySelectorAll(".role-select").forEach(select => {
     select.addEventListener("change", async (e) => {
       const targetUserId = e.target.getAttribute("data-user-id");
@@ -881,6 +895,43 @@ function renderAdminUsersTable() {
         });
       } catch (err) {
         alert("Erro ao alterar cargo: " + err.message);
+      }
+    });
+  });
+
+  // Listeners para exclusão de usuário pelo Admin
+  document.querySelectorAll(".btn-delete-user").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const targetButton = e.currentTarget;
+      const targetUserId = targetButton.getAttribute("data-delete-user-id");
+      const targetUserName = targetButton.getAttribute("data-user-name");
+
+      const confirmou = confirm(`Tem certeza que deseja excluir a conta de "${targetUserName}"?\n\nEsta ação excluirá o cadastro do usuário e todos os registros de ponto vinculados.`);
+      if (!confirmou) return;
+
+      targetButton.disabled = true;
+      targetButton.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Excluindo...`;
+
+      try {
+        // 1. Exclui o documento do usuário
+        await deleteDoc(doc(db, "usuarios", targetUserId));
+
+        // 2. Exclui em lote todos os registros de ponto do usuário
+        const qPontos = query(collection(db, "pontos"), where("usuarioId", "==", targetUserId));
+        const snapshotPontos = await getDocs(qPontos);
+        
+        if (!snapshotPontos.empty) {
+          const batch = writeBatch(db);
+          snapshotPontos.forEach(docSnap => {
+            batch.delete(docSnap.ref);
+          });
+          await batch.commit();
+        }
+
+        alert(`Conta de "${targetUserName}" e seus registros foram excluídos com sucesso.`);
+      } catch (err) {
+        console.error("Erro ao excluir conta:", err);
+        alert("Erro ao excluir conta: " + err.message);
       }
     });
   });
