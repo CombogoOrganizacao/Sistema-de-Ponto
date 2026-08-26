@@ -1,0 +1,17 @@
+{
+  "name": "Combogó Ponto",
+  "short_name": "CombogóPonto",
+  "description": "Sistema de Ponto Eletrônico Combogó",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#f97316",
+  "icons": [
+    {
+      "src": "./combogo_icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
