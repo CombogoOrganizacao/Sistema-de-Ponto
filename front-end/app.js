@@ -435,26 +435,35 @@ let hasSyncedServerTime = false;
 async function sincronizarHoraServidor() {
   try {
     const t0 = performance.now();
-    const res = await fetch("https://worldtimeapi.org/api/timezone/America/Recife", { cache: "no-store" });
+    const res = await fetch("https://timeapi.io/api/time/current/zone?timeZone=America/Recife", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       const t1 = performance.now();
       const latency = (t1 - t0) / 2;
-      const serverDate = new Date(new Date(data.datetime).getTime() + latency);
-      serverTimeOffsetMs = serverDate.getTime() - Date.now();
-      hasSyncedServerTime = true;
-      return serverDate;
+      // data.dateTime vem no formato YYYY-MM-DDTHH:MM:SS... no fuso de Recife (-03:00)
+      const isoWithOffset = data.dateTime.includes("-03:00") ? data.dateTime : `${data.dateTime}-03:00`;
+      const serverDate = new Date(new Date(isoWithOffset).getTime() + latency);
+      if (!isNaN(serverDate.getTime())) {
+        serverTimeOffsetMs = serverDate.getTime() - Date.now();
+        hasSyncedServerTime = true;
+        return serverDate;
+      }
     }
   } catch (e) {
     // Fallback secundário
     try {
-      const res = await fetch("https://timeapi.io/api/time/current/zone?timeZone=America/Recife", { cache: "no-store" });
+      const t0 = performance.now();
+      const res = await fetch("https://worldtimeapi.org/api/timezone/America/Recife", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        const serverDate = new Date(data.dateTime);
-        serverTimeOffsetMs = serverDate.getTime() - Date.now();
-        hasSyncedServerTime = true;
-        return serverDate;
+        const t1 = performance.now();
+        const latency = (t1 - t0) / 2;
+        const serverDate = new Date(new Date(data.datetime).getTime() + latency);
+        if (!isNaN(serverDate.getTime())) {
+          serverTimeOffsetMs = serverDate.getTime() - Date.now();
+          hasSyncedServerTime = true;
+          return serverDate;
+        }
       }
     } catch (e2) {
       console.warn("Não foi possível sincronizar hora externa no momento:", e2);
