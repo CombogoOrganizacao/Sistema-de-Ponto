@@ -425,23 +425,95 @@ btnRefreshLocation.addEventListener("click", () => {
 });
 
 // ==========================================
-// REGRAS DE HORÁRIO E TOLERÂNCIA (±20 min)
+// REGRAS DE HORÁRIO OFICIAL (Anti-Burla de Relógio)
 // ==========================================
-function validarHorarioPonto(tipo, curso, isAdmin) {
+// Busca a hora oficial de Brasília (Recife / GMT-3) via servidor externo
+// Se offline/bloqueado, sincroniza com offset estimado para impedir alterações manuais no celular
+let serverTimeOffsetMs = 0;
+let hasSyncedServerTime = false;
+
+async function sincronizarHoraServidor() {
+  try {
+    const t0 = performance.now();
+    const res = await fetch("https://worldtimeapi.org/api/timezone/America/Recife", { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      const t1 = performance.now();
+      const latency = (t1 - t0) / 2;
+      const serverDate = new Date(new Date(data.datetime).getTime() + latency);
+      serverTimeOffsetMs = serverDate.getTime() - Date.now();
+      hasSyncedServerTime = true;
+      return serverDate;
+    }
+  } catch (e) {
+    // Fallback secundário
+    try {
+      const res = await fetch("https://timeapi.io/api/time/current/zone?timeZone=America/Recife", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        const serverDate = new Date(data.dateTime);
+        serverTimeOffsetMs = serverDate.getTime() - Date.now();
+        hasSyncedServerTime = true;
+        return serverDate;
+      }
+    } catch (e2) {
+      console.warn("Não foi possível sincronizar hora externa no momento:", e2);
+    }
+  }
+  return new Date(Date.now() + serverTimeOffsetMs);
+}
+
+// Inicia sincronização em segundo plano
+sincronizarHoraServidor();
+
+async function obterHoraOficialRecife() {
+  // Sincroniza sempre antes de validar
+  return await sincronizarHoraServidor();
+}
+
+function formatarDataChave(dateObj) {
+  // Retorna YYYY-MM-DD no fuso oficial de Recife
+  const formatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Recife',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const parts = formatter.formatToParts(dateObj);
+  const dia = parts.find(p => p.type === 'day').value;
+  const mes = parts.find(p => p.type === 'month').value;
+  const ano = parts.find(p => p.type === 'year').value;
+  return `${ano}-${mes}-${dia}`;
+}
+
+function obterMinutosDoDia(dateObj) {
+  const formatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Recife',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(dateObj);
+  const hora = parseInt(parts.find(p => p.type === 'hour').value, 10);
+  const minuto = parseInt(parts.find(p => p.type === 'minute').value, 10);
+  return { hora, minuto, totalMinutos: hora * 60 + minuto };
+}
+
+function validarHorarioPonto(tipo, curso, isAdmin, dateOficial) {
   if (isAdmin) return { valido: true };
 
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const { hora, minuto, totalMinutos: currentMinutes } = obterMinutosDoDia(dateOficial);
+  const agoraStr = `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`;
 
   if (tipo === "entrada") {
+    // 14:00 -> 840 minutos. Tolerância: 13:40 (820 min) até 14:20 (860 min)
     const minEntrada = 13 * 60 + 40; // 13:40
     const maxEntrada = 14 * 60 + 20; // 14:20
 
     if (currentMinutes < minEntrada || currentMinutes > maxEntrada) {
-      const agoraStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
       return {
         valido: false,
-        motivo: `Horário de Entrada não permitido (${agoraStr}). O ponto deve ser registrado entre 13:40 e 14:20 (tolerância de 20 min para as 14h).`
+        motivo: `Horário de Entrada não permitido (Hora Oficial: ${agoraStr}). O ponto de entrada só pode ser registrado entre 13:40 e 14:20 (tolerância de 20 min para as 14h).`
       };
     }
     return { valido: true };
@@ -451,25 +523,25 @@ function validarHorarioPonto(tipo, curso, isAdmin) {
     const isJogos = (curso || "").toLowerCase().includes("jogos");
     
     if (isJogos) {
+      // 16:00 -> 960 minutos. Tolerância: 15:40 (940 min) até 16:20 (980 min)
       const minSaidaJogos = 15 * 60 + 40; // 15:40
       const maxSaidaJogos = 16 * 60 + 20; // 16:20
 
       if (currentMinutes < minSaidaJogos || currentMinutes > maxSaidaJogos) {
-        const agoraStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
         return {
           valido: false,
-          motivo: `Horário de Saída para Jogos Digitais não permitido (${agoraStr}). O ponto deve ser registrado entre 15:40 e 16:20 (tolerância de 20 min para as 16h).`
+          motivo: `Horário de Saída para Jogos Digitais não permitido (Hora Oficial: ${agoraStr}). O ponto de saída deve ser registrado entre 15:40 e 16:20 (tolerância de 20 min para as 16h).`
         };
       }
     } else {
+      // 17:00 -> 1020 minutos. Tolerância: 16:40 (1000 min) até 17:20 (1040 min)
       const minSaidaGeral = 16 * 60 + 40; // 16:40
       const maxSaidaGeral = 17 * 60 + 20; // 17:20
 
       if (currentMinutes < minSaidaGeral || currentMinutes > maxSaidaGeral) {
-        const agoraStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
         return {
           valido: false,
-          motivo: `Horário de Saída não permitido (${agoraStr}). O ponto deve ser registrado entre 16:40 e 17:20 (tolerância de 20 min para as 17h).`
+          motivo: `Horário de Saída não permitido (Hora Oficial: ${agoraStr}). O ponto de saída deve ser registrado entre 16:40 e 17:20 (tolerância de 20 min para as 17h).`
         };
       }
     }
@@ -484,27 +556,33 @@ function validarHorarioPonto(tipo, curso, isAdmin) {
 // CONTROLE DE PONTOS DIÁRIOS (1 Entrada e 1 Saída por dia)
 // ==========================================
 function checarPontosHoje(userId) {
-  if (!userId) return { jaBateuEntrada: false, jaBateuSaida: false, horaEntrada: null, horaSaida: null };
+  if (!userId) return { jaBateuEntrada: false, jaBateuSaida: false, horaEntrada: null, horaSaida: null, dataHojeChave: "" };
 
-  const hoje = new Date();
-  const hojeAno = hoje.getFullYear();
-  const hojeMes = hoje.getMonth();
-  const hojeDia = hoje.getDate();
+  const dataHojeOficial = new Date(Date.now() + serverTimeOffsetMs);
+  const hojeChave = formatarDataChave(dataHojeOficial);
 
   const pontosHoje = allPontosData.filter(p => {
-    if (p.usuarioId !== userId || !p.registro) return false;
+    if (p.usuarioId !== userId) return false;
+    
+    // Checa pelo campo dataChave ou pela conversão de registro
+    if (p.dataChave) {
+      return p.dataChave === hojeChave;
+    }
+
+    if (!p.registro) return false;
     const d = p.registro.toDate ? p.registro.toDate() : new Date(p.registro);
-    return !isNaN(d.getTime()) && d.getFullYear() === hojeAno && d.getMonth() === hojeMes && d.getDate() === hojeDia;
+    return !isNaN(d.getTime()) && formatarDataChave(d) === hojeChave;
   });
 
   const pontoEntrada = pontosHoje.find(p => p.tipo === "entrada");
   const pontoSaida = pontosHoje.find(p => p.tipo === "saida");
 
   return {
+    dataHojeChave: hojeChave,
     jaBateuEntrada: !!pontoEntrada,
     jaBateuSaida: !!pontoSaida,
-    horaEntrada: pontoEntrada ? (pontoEntrada.registro.toDate ? pontoEntrada.registro.toDate() : new Date(pontoEntrada.registro)) : null,
-    horaSaida: pontoSaida ? (pontoSaida.registro.toDate ? pontoSaida.registro.toDate() : new Date(pontoSaida.registro)) : null
+    horaEntrada: pontoEntrada ? (pontoEntrada.registro ? (pontoEntrada.registro.toDate ? pontoEntrada.registro.toDate() : new Date(pontoEntrada.registro)) : null) : null,
+    horaSaida: pontoSaida ? (pontoSaida.registro ? (pontoSaida.registro.toDate ? pontoSaida.registro.toDate() : new Date(pontoSaida.registro)) : null) : null
   };
 }
 
@@ -530,8 +608,8 @@ function atualizarEstadoBotoesPonto() {
   if (statusHoje.jaBateuEntrada) {
     btnBaterEntrada.disabled = true;
     btnBaterEntrada.className = "py-3.5 px-4 bg-gray-800 text-gray-400 border border-gray-700 font-semibold text-sm rounded-xl cursor-not-allowed flex items-center justify-center gap-2 opacity-80";
-    const horaFormat = statusHoje.horaEntrada ? statusHoje.horaEntrada.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
-    btnBaterEntrada.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i><span>Entrada Realizada (${horaFormat})</span>`;
+    const horaFormat = statusHoje.horaEntrada ? statusHoje.horaEntrada.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Recife" }) : "";
+    btnBaterEntrada.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i><span>Entrada Realizada ${horaFormat ? `(${horaFormat})` : ''}</span>`;
   } else {
     btnBaterEntrada.disabled = false;
     btnBaterEntrada.className = "py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer";
@@ -542,8 +620,8 @@ function atualizarEstadoBotoesPonto() {
   if (statusHoje.jaBateuSaida) {
     btnBaterSaida.disabled = true;
     btnBaterSaida.className = "py-3.5 px-4 bg-gray-800 text-gray-400 border border-gray-700 font-semibold text-sm rounded-xl cursor-not-allowed flex items-center justify-center gap-2 opacity-80";
-    const horaFormat = statusHoje.horaSaida ? statusHoje.horaSaida.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
-    btnBaterSaida.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5 text-rose-400"></i><span>Saída Realizada (${horaFormat})</span>`;
+    const horaFormat = statusHoje.horaSaida ? statusHoje.horaSaida.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Recife" }) : "";
+    btnBaterSaida.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5 text-rose-400"></i><span>Saída Realizada ${horaFormat ? `(${horaFormat})` : ''}</span>`;
   } else {
     btnBaterSaida.disabled = false;
     btnBaterSaida.className = "py-3.5 px-4 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40 cursor-pointer";
@@ -576,45 +654,55 @@ async function registrarPontoWeb(tipo) {
   const curso = currentUserProfile.curso || "";
   const isAdmin = currentUserProfile.cargo === "admin";
 
-  // 1. Verificação de Ponto Já Realizado Hoje (1 por dia)
-  if (!isAdmin) {
-    const statusHoje = checarPontosHoje(currentUserData.uid);
-    if (tipo === "entrada" && statusHoje.jaBateuEntrada) {
-      showPontoStatus("Você já realizou o registro de ENTRADA hoje. Apenas 1 entrada é permitida por dia.", true);
-      return;
-    }
-    if (tipo === "saida" && statusHoje.jaBateuSaida) {
-      showPontoStatus("Você já realizou o registro de SAÍDA hoje. Apenas 1 saída é permitida por dia.", true);
-      return;
-    }
-  }
-
-  // 2. Validação de Horário com Tolerância
-  const validacaoHorario = validarHorarioPonto(tipo, curso, isAdmin);
-  if (!validacaoHorario.valido) {
-    showPontoStatus(validacaoHorario.motivo, true);
-    return;
-  }
-
   btnBaterEntrada.disabled = true;
   btnBaterSaida.disabled = true;
-  showPontoStatus("Validando sua localização por GPS...");
+  showPontoStatus("Sincronizando hora oficial e validando localização GPS...");
 
   try {
-    const geo = await obterLocalizacaoAtual();
+    // 1. Sincroniza e obtém hora oficial do servidor (à prova de alteração de relógio)
+    const dataOficial = await obterHoraOficialRecife();
+    const dataChave = formatarDataChave(dataOficial);
+    const pontoDocId = `${currentUserData.uid}_${dataChave}_${tipo}`;
 
+    // 2. Verificação no Firestore se já existe ponto registrado para este dia e tipo
+    if (!isAdmin) {
+      const pontoExistenteRef = doc(db, "pontos", pontoDocId);
+      const pontoExistenteSnap = await getDoc(pontoExistenteRef);
+      if (pontoExistenteSnap.exists()) {
+        showPontoStatus(`Ponto Duplicado Bloqueado: Você já registrou ${tipo.toUpperCase()} hoje (${dataChave}).`, true);
+        atualizarEstadoBotoesPonto();
+        return;
+      }
+    }
+
+    // 3. Validação de Horário com Tolerância de 20 min usando a Hora Oficial
+    const validacaoHorario = validarHorarioPonto(tipo, curso, isAdmin, dataOficial);
+    if (!validacaoHorario.valido) {
+      showPontoStatus(validacaoHorario.motivo, true);
+      atualizarEstadoBotoesPonto();
+      return;
+    }
+
+    // 4. Validação Geofence em tempo real
+    const geo = await obterLocalizacaoAtual();
     if (!geo.dentro) {
       showPontoStatus(`Ponto Bloqueado: Você precisa estar no campus da UNICAP ou no Museu da UNICAP (Distância atual: ~${geo.distancia}m).`, true);
       atualizarEstadoBotoesPonto();
       return;
     }
 
-    await addDoc(collection(db, "pontos"), {
+    // 5. Gravação no Firestore com ID determinístico único diário (Impossível duplicar)
+    const pontoRef = isAdmin 
+      ? doc(collection(db, "pontos")) // Admin pode criar múltiplos para testes
+      : doc(db, "pontos", pontoDocId); // Aluno grava com ID fixo único diário
+
+    await setDoc(pontoRef, {
       usuarioId: currentUserData.uid,
       usuarioNome: currentUserProfile.nome || currentUserData.displayName || "Colaborador",
       usuarioEmail: currentUserData.email || "",
       usuarioCurso: curso || "Não especificado",
       tipo: tipo,
+      dataChave: dataChave,
       localizacao: `${geo.localNome} (GPS Validado)`,
       coordenadas: {
         latitude: geo.latitude,
@@ -628,7 +716,7 @@ async function registrarPontoWeb(tipo) {
     showPontoStatus(`Ponto de ${tipo.toUpperCase()} registrado com sucesso no ${geo.localNome}! (+1h30min adicionado)`);
   } catch (err) {
     console.error("Erro ao registrar ponto:", err);
-    showPontoStatus(err.message || "Erro ao verificar localização GPS.", true);
+    showPontoStatus(err.message || "Erro ao registrar ponto.", true);
   } finally {
     atualizarEstadoBotoesPonto();
   }
@@ -636,6 +724,64 @@ async function registrarPontoWeb(tipo) {
 
 btnBaterEntrada.addEventListener("click", () => registrarPontoWeb("entrada"));
 btnBaterSaida.addEventListener("click", () => registrarPontoWeb("saida"));
+
+// ==========================================
+// RESET GERAL DE PONTOS E HORAS (ADMIN)
+// ==========================================
+const btnResetAllPoints = document.getElementById("btn-reset-all-points");
+if (btnResetAllPoints) {
+  btnResetAllPoints.addEventListener("click", async () => {
+    if (!currentUserProfile || currentUserProfile.cargo !== "admin") {
+      alert("Apenas administradores podem resetar o banco de pontos.");
+      return;
+    }
+
+    const confirmacao = prompt(
+      'ATENÇÃO: Você está prestes a APAGAR TODOS OS PONTOS E ZERAR AS HORAS DE TODOS OS ALUNOS.\n\nPara confirmar esta ação, digite "ZERAR" no campo abaixo:'
+    );
+
+    if (confirmacao !== "ZERAR") {
+      alert("Ação cancelada. O banco de pontos não foi alterado.");
+      return;
+    }
+
+    btnResetAllPoints.disabled = true;
+    btnResetAllPoints.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Zerando banco...`;
+
+    try {
+      const snap = await getDocs(collection(db, "pontos"));
+      if (snap.empty) {
+        alert("O banco de pontos já está vazio.");
+        return;
+      }
+
+      // Deleta todos os pontos em batches de 400 documentos
+      let batch = writeBatch(db);
+      let count = 0;
+      for (const docSnap of snap.docs) {
+        batch.delete(docSnap.ref);
+        count++;
+        if (count >= 400) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+      if (count > 0) {
+        await batch.commit();
+      }
+
+      alert("Todos os registros de ponto foram apagados e as horas acumuladas foram zeradas com sucesso!");
+    } catch (err) {
+      console.error("Erro ao zerar pontos:", err);
+      alert("Erro ao zerar pontos: " + err.message);
+    } finally {
+      btnResetAllPoints.disabled = false;
+      btnResetAllPoints.innerHTML = `<i data-lucide="trash" class="w-3.5 h-3.5"></i><span>Zerar Todos os Pontos e Horas</span>`;
+      renderIcons();
+    }
+  });
+}
 
 // ==========================================
 // TABELA E HISTÓRICO DE PONTOS
