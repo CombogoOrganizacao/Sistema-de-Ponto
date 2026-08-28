@@ -614,19 +614,6 @@ function atualizarEstadoBotoesPonto() {
   if (!currentUserData) return;
 
   const statusHoje = checarPontosHoje(currentUserData.uid);
-  const isAdmin = currentUserProfile && currentUserProfile.cargo === "admin";
-
-  // Se for admin, os botões permanecem sempre habilitados para testes caso queira
-  if (isAdmin) {
-    btnBaterEntrada.disabled = false;
-    btnBaterSaida.disabled = false;
-    btnBaterEntrada.className = "py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 cursor-pointer";
-    btnBaterSaida.className = "py-3.5 px-4 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] font-bold text-sm text-white rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40 cursor-pointer";
-    btnBaterEntrada.innerHTML = `<i data-lucide="arrow-down-left" class="w-5 h-5"></i><span>Bater Entrada (Admin Livre)</span>`;
-    btnBaterSaida.innerHTML = `<i data-lucide="arrow-up-right" class="w-5 h-5"></i><span>Bater Saída (Admin Livre)</span>`;
-    renderIcons();
-    return;
-  }
 
   // Controle de Entrada
   if (statusHoje.jaBateuEntrada) {
@@ -678,6 +665,19 @@ async function registrarPontoWeb(tipo) {
   const curso = currentUserProfile.curso || "";
   const isAdmin = currentUserProfile.cargo === "admin";
 
+  // Verificação prévia instantânea
+  const statusPreCheck = checarPontosHoje(currentUserData.uid);
+  if (tipo === "entrada" && statusPreCheck.jaBateuEntrada) {
+    showPontoStatus("Ponto Bloqueado: Você já registrou a ENTRADA de hoje. Apenas 1 entrada por dia é permitida.", true);
+    atualizarEstadoBotoesPonto();
+    return;
+  }
+  if (tipo === "saida" && statusPreCheck.jaBateuSaida) {
+    showPontoStatus("Ponto Bloqueado: Você já registrou a SAÍDA de hoje. Apenas 1 saída por dia é permitida.", true);
+    atualizarEstadoBotoesPonto();
+    return;
+  }
+
   btnBaterEntrada.disabled = true;
   btnBaterSaida.disabled = true;
   showPontoStatus("Sincronizando hora oficial e validando localização GPS...");
@@ -688,15 +688,13 @@ async function registrarPontoWeb(tipo) {
     const dataChave = formatarDataChave(dataOficial);
     const pontoDocId = `${currentUserData.uid}_${dataChave}_${tipo}`;
 
-    // 2. Verificação no Firestore se já existe ponto registrado para este dia e tipo
-    if (!isAdmin) {
-      const pontoExistenteRef = doc(db, "pontos", pontoDocId);
-      const pontoExistenteSnap = await getDoc(pontoExistenteRef);
-      if (pontoExistenteSnap.exists()) {
-        showPontoStatus(`Ponto Duplicado Bloqueado: Você já registrou ${tipo.toUpperCase()} hoje (${dataChave}).`, true);
-        atualizarEstadoBotoesPonto();
-        return;
-      }
+    // 2. Verificação direta no Firestore para impedir cliques concorrentes ou abas paralelas
+    const pontoExistenteRef = doc(db, "pontos", pontoDocId);
+    const pontoExistenteSnap = await getDoc(pontoExistenteRef);
+    if (pontoExistenteSnap.exists()) {
+      showPontoStatus(`Ponto Bloqueado: Registro de ${tipo.toUpperCase()} já efetuado hoje (${dataChave}).`, true);
+      atualizarEstadoBotoesPonto();
+      return;
     }
 
     // 3. Validação de Horário com Tolerância de 20 min usando a Hora Oficial
@@ -715,12 +713,8 @@ async function registrarPontoWeb(tipo) {
       return;
     }
 
-    // 5. Gravação no Firestore com ID determinístico único diário (Impossível duplicar)
-    const pontoRef = isAdmin 
-      ? doc(collection(db, "pontos")) // Admin pode criar múltiplos para testes
-      : doc(db, "pontos", pontoDocId); // Aluno grava com ID fixo único diário
-
-    await setDoc(pontoRef, {
+    // 5. Gravação no Firestore com ID determinístico fixo único diário (Impossível criar mais de 1 documento)
+    await setDoc(pontoExistenteRef, {
       usuarioId: currentUserData.uid,
       usuarioNome: currentUserProfile.nome || currentUserData.displayName || "Colaborador",
       usuarioEmail: currentUserData.email || "",
@@ -1009,19 +1003,48 @@ function renderPontosTable() {
 }
 
 // ==========================================
-// CÁLCULO DE HORAS ACUMULADAS (+1:30h por Ponto)
+// CÁLCULO DE HORAS ACUMULADAS (+1:30h por Ponto Único Diário)
 // ==========================================
-// Cada batida de Entrada garante +1h30min (90 min)
-// Cada batida de Saída garante +1h30min (90 min)
-// Totalizando 3h00min no dia com o ciclo completo
+// Regra Estrita: Cada dia (dataChave) só pode computar no MÁXIMO 1 Entrada (+1h30m) e 1 Saída (+1h30m).
+// Total máximo diário = 3h00m. Mesmo que existam registros duplicados no banco, apenas 1 de cada por dia é computado.
 function calculateHoursForUser(userId) {
   const userPontos = allPontosData.filter(p => p.usuarioId === userId && p.registro);
   
-  const totalEntradas = userPontos.filter(p => p.tipo === "entrada").length;
-  const totalSaidas = userPontos.filter(p => p.tipo === "saida").length;
-  const totalPontosValidos = totalEntradas + totalSaidas;
+  // Agrupa por dia (dataChave ou data formatada)
+  const diasProcessados = {};
 
-  const totalMinutes = totalPontosValidos * 90; // 90 minutos (+1:30h) por batida
+  userPontos.forEach(p => {
+    let diaKey = p.dataChave;
+    if (!diaKey && p.registro) {
+      const d = p.registro.toDate ? p.registro.toDate() : new Date(p.registro);
+      if (!isNaN(d.getTime())) {
+        diaKey = formatarDataChave(d);
+      }
+    }
+    if (!diaKey) return;
+
+    if (!diasProcessados[diaKey]) {
+      diasProcessados[diaKey] = { temEntrada: false, temSaida: false };
+    }
+
+    if (p.tipo === "entrada") {
+      diasProcessados[diaKey].temEntrada = true;
+    } else if (p.tipo === "saida") {
+      diasProcessados[diaKey].temSaida = true;
+    }
+  });
+
+  // Conta os dias únicos
+  let totalEntradasUnicas = 0;
+  let totalSaidasUnicas = 0;
+
+  Object.values(diasProcessados).forEach(dia => {
+    if (dia.temEntrada) totalEntradasUnicas++;
+    if (dia.temSaida) totalSaidasUnicas++;
+  });
+
+  const totalPontosValidos = totalEntradasUnicas + totalSaidasUnicas;
+  const totalMinutes = totalPontosValidos * 90; // 90 minutos (+1:30h) por batida única diária
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
@@ -1029,8 +1052,8 @@ function calculateHoursForUser(userId) {
     hours,
     minutes,
     totalMinutes,
-    totalEntradas,
-    totalSaidas,
+    totalEntradas: totalEntradasUnicas,
+    totalSaidas: totalSaidasUnicas,
     text: `${hours}h ${String(minutes).padStart(2, '0')}m`
   };
 }
