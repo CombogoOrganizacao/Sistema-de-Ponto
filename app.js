@@ -322,16 +322,31 @@ btnLogout.addEventListener("click", async () => {
   await signOut(auth);
 });
 
-// Navegação entre Abas
+// Navegação entre Abas (Com Proteção Rigorosa de Acesso)
 tabNavPontos.addEventListener("click", () => {
   tabNavPontos.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-orange-500 text-white transition flex items-center gap-2";
-  tabNavAdmin.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gray-900 text-gray-400 hover:text-white border border-gray-800 transition flex items-center gap-2";
+  tabNavAdmin.className = "hidden px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gray-900 text-gray-400 hover:text-white border border-gray-800 transition flex items-center gap-2";
+  
+  if (currentUserProfile && currentUserProfile.cargo === "admin") {
+    tabNavAdmin.classList.remove("hidden");
+  }
+  
   viewPontosSection.classList.remove("hidden");
   viewAdminSection.classList.add("hidden");
   renderIcons();
 });
 
 tabNavAdmin.addEventListener("click", () => {
+  if (!currentUserProfile || currentUserProfile.cargo !== "admin") {
+    // Aluno não tem permissão para acessar o painel admin
+    viewAdminSection.classList.add("hidden");
+    tabNavAdmin.classList.add("hidden");
+    viewPontosSection.classList.remove("hidden");
+    tabNavPontos.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-orange-500 text-white transition flex items-center gap-2";
+    renderIcons();
+    return;
+  }
+
   tabNavAdmin.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-orange-500 text-white transition flex items-center gap-2";
   tabNavPontos.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gray-900 text-gray-400 hover:text-white border border-gray-800 transition flex items-center gap-2";
   viewAdminSection.classList.remove("hidden");
