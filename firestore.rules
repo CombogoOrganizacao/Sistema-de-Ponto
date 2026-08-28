@@ -29,10 +29,10 @@ service cloud.firestore {
 
     // Regras para a coleção de pontos
     match /pontos/{pontoId} {
-      // Usuário pode ler seus próprios pontos ou Admin pode ler todos
-      allow read: if isAuthenticated() && (resource.data.usuarioId == request.auth.uid || isAdmin());
+      // Usuário autenticado pode ler pontos (necessário para listar histórico e estatísticas)
+      allow read: if isAuthenticated();
       
-      // Usuário autenticado pode criar seu registro de ponto
+      // Usuário autenticado pode criar seu próprio registro de ponto
       allow create: if isAuthenticated() && request.resource.data.usuarioId == request.auth.uid;
       
       // Apenas admin pode alterar ou deletar pontos (integridade do registro)
